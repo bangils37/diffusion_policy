@@ -44,24 +44,13 @@ def write_episode_worker(args):
     episode_idx, start_idx, end_idx, dataset_dir, zarr_dir, cam_names, target_size = args
     dataset_path = pathlib.Path(dataset_dir)
     zarr_path = pathlib.Path(zarr_dir)
+    n_frames = end_idx - start_idx
     
-    # 1. Read parquet
-    parquet_path = dataset_path / "data" / "chunk-000" / f"episode_{episode_idx:06d}.parquet"
-    table = pq.read_table(parquet_path)
-    df = table.to_pandas()
-    
-    states = np.stack(df['observation.state'].values).astype(np.float32)
-    actions = np.stack(df['action'].values).astype(np.float32)
-    n_frames = len(df)
-    
-    # 2. Open zarr array slice
+    # Open zarr array
     root = zarr.open(str(zarr_path), mode='a')
     data_group = root['data']
     
-    data_group['state'][start_idx:end_idx] = states
-    data_group['action'][start_idx:end_idx] = actions
-    
-    # 3. Read & write videos
+    # Read & write videos
     for cam in cam_names:
         video_path = dataset_path / "videos" / "chunk-000" / f"observation.images.{cam}" / f"episode_{episode_idx:06d}.mp4"
         frames = process_episode_video(str(video_path), target_size=target_size)
@@ -132,14 +121,31 @@ def main(input, output, resolution, num_workers, max_episodes):
     lowdim_compressor = numcodecs.Blosc(cname='lz4', clevel=5, shuffle=numcodecs.Blosc.NOSHUFFLE)
     
     print("Pre-allocating arrays...")
-    data_group.zeros('state', shape=(total_frames, 16), chunks=(1000, 16), dtype=np.float32, compressor=lowdim_compressor)
-    data_group.zeros('action', shape=(total_frames, 16), chunks=(1000, 16), dtype=np.float32, compressor=lowdim_compressor)
+    state_arr = data_group.zeros('state', shape=(total_frames, 16), chunks=(1000, 16), dtype=np.float32, compressor=lowdim_compressor)
+    action_arr = data_group.zeros('action', shape=(total_frames, 16), chunks=(1000, 16), dtype=np.float32, compressor=lowdim_compressor)
     
     for cam in cam_names:
         data_group.zeros(cam, shape=(total_frames, img_h, img_w, 3), chunks=(1, img_h, img_w, 3), dtype=np.uint8, compressor=image_compressor)
         
     meta_group.array('episode_ends', episode_ends, compressor=None, overwrite=True)
     
+    # 1. Read & write all low-dim states and actions sequentially (fast & race-free)
+    print("Loading & writing state/action low-dim data...")
+    all_states = []
+    all_actions = []
+    for ep in tqdm(episodes_meta, desc="Reading Parquet low-dim data"):
+        ep_idx = ep['episode_index']
+        parquet_path = input_path / "data" / "chunk-000" / f"episode_{ep_idx:06d}.parquet"
+        table = pq.read_table(parquet_path)
+        df = table.to_pandas()
+        all_states.append(np.stack(df['observation.state'].values).astype(np.float32))
+        all_actions.append(np.stack(df['action'].values).astype(np.float32))
+        
+    state_arr[:] = np.concatenate(all_states, axis=0)
+    action_arr[:] = np.concatenate(all_actions, axis=0)
+    print(f"State & action written: shape={state_arr.shape}")
+    
+    # 2. Parallel video processing
     tasks = []
     for i, ep in enumerate(episodes_meta):
         ep_idx = ep['episode_index']
@@ -152,7 +158,7 @@ def main(input, output, resolution, num_workers, max_episodes):
     print("Converting episodes in parallel...")
     with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
         futures = {executor.submit(write_episode_worker, t): t[0] for t in tasks}
-        with tqdm(total=total_episodes, desc="Encoding & Writing to Zarr") as pbar:
+        with tqdm(total=total_episodes, desc="Encoding & Writing Videos to Zarr") as pbar:
             for future in concurrent.futures.as_completed(futures):
                 ep_idx, n_frames = future.result()
                 pbar.update(1)
