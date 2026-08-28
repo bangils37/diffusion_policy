@@ -10,9 +10,15 @@ sys.stdout = open(sys.stdout.fileno(), mode='w', buffering=1)
 sys.stderr = open(sys.stderr.fileno(), mode='w', buffering=1)
 
 import hydra
+import torch
 from omegaconf import OmegaConf
 import pathlib
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
+
+# Enable TF32 for fast matmul and cuDNN on Ampere/Ada/Hopper/Blackwell GPUs
+if torch.cuda.is_available():
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
 
 # allows arbitrary python code execution in configs using the ${eval:''} resolver
 OmegaConf.register_new_resolver("eval", eval, replace=True)
