@@ -7,6 +7,26 @@ data_local
 .vscode
 _wandb
 
+# Environments
+env/
+.venv/
+venv/
+ENV/
+
+# Datasets & Large files
+*.zarr/
+*.zarr
+*.zarr.zip
+*.h5
+*.hdf5
+*.lock
+
+# Model checkpoints & weights
+checkpoints/
+*.ckpt
+*.pt
+*.pth
+
 **/.DS_Store
 
 fuse.cfg
