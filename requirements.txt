@@ -17,6 +17,8 @@ imagecodecs>=2022.8.8
 h5py>=3.7.0
 numpy>=1.23.0,<2.0.0
 scipy>=1.9.0
+pandas>=2.0.0
+pyarrow>=14.0.0
 
 # Vision, Video & Media Processing
 opencv-python>=4.6.0
