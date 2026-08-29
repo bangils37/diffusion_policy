@@ -1,0 +1,41 @@
+# Core Deep Learning & Diffusion
+torch>=2.0.0
+torchvision
+diffusers>=0.11.1
+accelerate>=0.13.2
+einops>=0.4.1
+
+# Configuration & Logging
+hydra-core>=1.2.0
+omegaconf>=2.2.0
+wandb>=0.13.0
+
+# Data Loading & Array Storage
+zarr>=2.12.0
+numcodecs>=0.10.2
+imagecodecs>=2022.8.8
+h5py>=3.7.0
+numpy>=1.23.0,<2.0.0
+scipy>=1.9.0
+
+# Vision, Video & Media Processing
+opencv-python>=4.6.0
+imageio>=2.22.0
+imageio-ffmpeg>=0.4.7
+av>=10.0.0
+scikit-image>=0.19.0
+scikit-video>=1.1.11
+matplotlib>=3.6.0
+Pillow>=9.0.0
+
+# Simulation & Utilities
+gym>=0.21.0
+pygame>=2.1.2
+pymunk>=6.2.1
+shapely>=1.8.0
+tqdm>=4.64.0
+dill>=0.3.5
+threadpoolctl>=3.1.0
+psutil>=5.9.0
+click>=8.0.0
+Cython>=0.29.0
