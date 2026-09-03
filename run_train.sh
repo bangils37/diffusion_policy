@@ -13,9 +13,16 @@ set -e
 # 🎯 USER CONFIGURATION (Chỉnh sửa các tham số ở đây)
 # ==============================================================================
 
-# 1. Tên Task & Cấu hình Workspace
+# 1. Tên Task & Kiến trúc Mô hình (Model Architecture)
 TASK_NAME="astribot_making_coffee_image"                  # File config trong diffusion_policy/config/task/
-CONFIG_NAME="train_diffusion_unet_real_image_workspace"   # File workspace config chính
+MODEL_TYPE="transformer"                                  # "transformer" (Transformer-Base) | "unet" (CNN/UNet Baseline)
+
+# Tự động gán config tương ứng theo MODEL_TYPE (hoặc ghi đè trực tiếp tên file config)
+if [ "$MODEL_TYPE" = "transformer" ]; then
+    CONFIG_NAME="train_diffusion_transformer_real_image_workspace"
+else
+    CONFIG_NAME="train_diffusion_unet_real_image_workspace"
+fi
 
 # 2. Đường dẫn Dataset (.zarr hoặc .zarr.zip)
 DATASET_PATH="/home/anhnb9/Documents/datasets/astri_making_coffee_v21.zarr"
@@ -23,12 +30,17 @@ DATASET_PATH="/home/anhnb9/Documents/datasets/astri_making_coffee_v21.zarr"
 # 3. Siêu tham số Huấn luyện (Training Hyperparameters)
 BATCH_SIZE=256              # Kích thước batch (256 cho RTX 6000/H100, 128 cho card tầm trung, 64 chuẩn paper)
 NUM_WORKERS=16              # Số luồng CPU load & giải nén dữ liệu (8 - 16)
-LEARNING_RATE="2.0e-4"      # Tốc độ học (2.0e-4 cho batch 256, 1.0e-4 cho batch 64)
+LEARNING_RATE="1.0e-4"      # Tốc độ học (1.0e-4 cho Transformer, 2.0e-4 cho UNet batch 256)
 NUM_EPOCHS=150              # Tổng số epoch cần train
 CHECKPOINT_EVERY=10         # Tần suất lưu checkpoint (mỗi N epoch)
-LR_WARMUP_STEPS=1000        # Số bước warmup learning rate
+LR_WARMUP_STEPS=1000        # Số bước warmup learning rate (Transformer rất cần warmup)
 
-# 4. Phần cứng (Hardware) & Weights & Biases (WandB)
+# 4. Cấu hình Transformer-Base (Chỉ áp dụng khi MODEL_TYPE="transformer")
+TRANSFORMER_LAYERS=12       # Số layer Transformer (12 cho bản base/large)
+TRANSFORMER_HEADS=8         # Số attention heads
+TRANSFORMER_EMB_DIM=512     # Chiều embedding (512 cho bản base/large)
+
+# 5. Phần cứng (Hardware) & Weights & Biases (WandB)
 GPU_ID=""                   # Để trống "" để tự động chọn GPU nhiều VRAM trống nhất, hoặc chỉ định "0", "1", "3"...
 WANDB_PROJECT="astribot_making_coffee"  # Tên project trên WandB
 WANDB_MODE="online"         # "online" (đẩy lên cloud) | "offline" (lưu máy cục bộ) | "disabled" (tắt WandB)
@@ -86,7 +98,7 @@ print(best_gpu)
     echo "🎯 Tự động chọn GPU có VRAM trống nhiều nhất: GPU $CUDA_VISIBLE_DEVICES"
 fi
 
-# 3. Kiểm tra đường dẫn Dataset
+# 3. Kiểm tra đường dẫn Dataset & Tùy biến tham số theo mô hình
 EXTRA_ARGS=()
 if [ -n "$DATASET_PATH" ]; then
     if [ -e "$DATASET_PATH" ]; then
@@ -98,10 +110,21 @@ if [ -n "$DATASET_PATH" ]; then
     fi
 fi
 
+# Thiết lập tham số optimizer và architecture phù hợp từng model
+if [[ "$CONFIG_NAME" == *"transformer"* ]]; then
+    EXTRA_ARGS+=("optimizer.learning_rate=$LEARNING_RATE")
+    EXTRA_ARGS+=("policy.n_layer=$TRANSFORMER_LAYERS")
+    EXTRA_ARGS+=("policy.n_head=$TRANSFORMER_HEADS")
+    EXTRA_ARGS+=("policy.n_emb=$TRANSFORMER_EMB_DIM")
+else
+    EXTRA_ARGS+=("optimizer.lr=$LEARNING_RATE")
+fi
+
 # 4. Thiết lập biến môi trường tăng tốc
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
 export PYTHONUNBUFFERED=1
 
+echo "⚙️  Kiến trúc: $MODEL_TYPE"
 echo "⚙️  Task: $TASK_NAME"
 echo "⚙️  Config Workspace: $CONFIG_NAME"
 echo "⚙️  Batch Size: $BATCH_SIZE"
@@ -109,6 +132,9 @@ echo "⚙️  Num Workers: $NUM_WORKERS"
 echo "⚙️  Learning Rate: $LEARNING_RATE"
 echo "⚙️  Total Epochs: $NUM_EPOCHS"
 echo "⚙️  Checkpoint Every: $CHECKPOINT_EVERY epochs"
+if [[ "$CONFIG_NAME" == *"transformer"* ]]; then
+    echo "⚙️  Transformer: layers=$TRANSFORMER_LAYERS, heads=$TRANSFORMER_HEADS, emb=$TRANSFORMER_EMB_DIM"
+fi
 echo "📊 WandB Project: $WANDB_PROJECT (mode: $WANDB_MODE)"
 echo "============================================================"
 
@@ -120,7 +146,6 @@ python train.py \
     val_dataloader.batch_size="$BATCH_SIZE" \
     dataloader.num_workers="$NUM_WORKERS" \
     val_dataloader.num_workers="$NUM_WORKERS" \
-    optimizer.lr="$LEARNING_RATE" \
     training.lr_warmup_steps="$LR_WARMUP_STEPS" \
     training.num_epochs="$NUM_EPOCHS" \
     training.checkpoint_every="$CHECKPOINT_EVERY" \
