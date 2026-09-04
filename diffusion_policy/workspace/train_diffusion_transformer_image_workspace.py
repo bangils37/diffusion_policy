@@ -23,7 +23,7 @@ from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from diffusion_policy.policy.diffusion_transformer_image_policy import DiffusionTransformerImagePolicy
 from diffusion_policy.dataset.base_dataset import BaseImageDataset
 from diffusion_policy.env_runner.base_image_runner import BaseImageRunner
-from diffusion_policy.common.checkpoint_util import TopKCheckpointManager
+from diffusion_policy.common.checkpoint_util import TopKCheckpointManager, RecentCheckpointManager
 from diffusion_policy.common.json_logger import JsonLogger
 from diffusion_policy.common.pytorch_util import dict_apply, optimizer_to
 from diffusion_policy.model.diffusion.ema_model import EMAModel
@@ -136,6 +136,12 @@ class TrainDiffusionTransformerImageWorkspace(BaseWorkspace):
             save_dir=os.path.join(self.output_dir, 'checkpoints'),
             **cfg.checkpoint.topk
         )
+        recent_manager = None
+        if hasattr(cfg.checkpoint, 'recent') and cfg.checkpoint.recent is not None:
+            recent_manager = RecentCheckpointManager(
+                save_dir=os.path.join(self.output_dir, 'checkpoints'),
+                **cfg.checkpoint.recent
+            )
 
         # device transfer
         device = torch.device(cfg.training.device)
@@ -274,6 +280,13 @@ class TrainDiffusionTransformerImageWorkspace(BaseWorkspace):
                         new_key = key.replace('/', '_')
                         metric_dict[new_key] = value
                     
+                    # 1. Save recent checkpoint (keeps last K periodic checkpoints)
+                    if recent_manager is not None:
+                        recent_ckpt_path = recent_manager.get_ckpt_path(metric_dict)
+                        if recent_ckpt_path is not None:
+                            self.save_checkpoint(path=recent_ckpt_path)
+
+                    # 2. Save best checkpoint based on monitor_key (e.g. lowest val_loss)
                     topk_ckpt_path = topk_manager.get_ckpt_path(metric_dict)
                     if topk_ckpt_path is not None:
                         self.save_checkpoint(path=topk_ckpt_path)
