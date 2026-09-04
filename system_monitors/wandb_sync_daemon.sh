@@ -1,9 +1,38 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# W&B Auto-Sync Daemon
-# ==============================================================================
-# Tự động quét và đồng bộ các file log .wandb cục bộ lên Weights & Biases cloud
-# Sử dụng cờ --legacy để loại bỏ hoàn toàn lỗi EOF (transactionlog error).
+# CÔNG CỤ: W&B Auto-Sync Daemon (Tiến Trình Tự Động Đồng Bộ Weights & Biases)
+# Tác giả: AI Assistant / AnhNB9
+# Mục đích:
+#     Tự động quét định kỳ các thư mục log của các mô hình AI đang huấn luyện
+#     (Diffusion Transformer & CNN/UNet) và đẩy các metrics, biểu đồ loss, learning rate
+#     lên hệ thống đám mây Weights & Biases (W&B).
+#
+# Bối cảnh kỹ thuật quan trọng:
+#     1. Tránh lỗi 'transactionlog unexpected EOF':
+#        Phiên bản wandb (0.29.x) có cơ chế đọc transaction log mới rất dễ văng lỗi EOF
+#        khi file log đang được ghi dở bởi tiến trình training khác. Script này bắt buộc
+#        phải sử dụng cờ:
+#            wandb sync --legacy --include-online ...
+#        để kích hoạt chế độ đồng bộ tương thích ngược cổ điển an toàn 100%.
+#     2. Đồng bộ các run offline hoặc đứt kết nối mạng:
+#        Khi server mất mạng tạm thời hoặc training bị kill, các điểm dữ liệu chưa đồng bộ
+#        sẽ được daemon này phát hiện và đẩy bù đầy đủ lên dashboard.
+#
+# Biến môi trường có thể cấu hình (Environment Variables):
+#     - WANDB_PROJECT   : Tên dự án W&B (Mặc định: 'astribot_making_coffee')
+#     - WANDB_ENTITY    : Tài khoản hoặc Workspace W&B (Mặc định: 'nguyenbanganh30-vnu')
+#     - SYNC_INTERVAL   : Khoảng thời gian nghỉ giữa 2 lần đồng bộ tính bằng giây (Mặc định: 300 = 5 phút)
+#
+# File nhật ký:
+#     - 'wandb_sync_daemon.log': Ghi nhận mốc thời gian và kết quả chi tiết từng lần đẩy dữ liệu.
+#
+# Hướng dẫn sử dụng:
+#     1. Chạy độc lập:
+#        ./wandb_sync_daemon.sh
+#     2. Chạy với chu kỳ 1 phút (60s):
+#        SYNC_INTERVAL=60 ./wandb_sync_daemon.sh
+#     3. Chạy nền bằng Nohup:
+#        nohup ./wandb_sync_daemon.sh > /dev/null 2>&1 &
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

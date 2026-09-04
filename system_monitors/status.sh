@@ -1,6 +1,31 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# 📊 System Monitors Status & Health Dashboard
+# CÔNG CỤ: System & Training Health Dashboard (Bảng Điều Khiển Giám Sát Toàn Diện)
+# Tác giả: AI Assistant / AnhNB9
+# Mục đích:
+#     Hiển thị báo cáo trực quan nhanh (Terminal Dashboard) về toàn bộ tình trạng
+#     phần cứng và phần mềm của máy chủ GPU (ai-server-1) chỉ với 1 câu lệnh duy nhất.
+#
+# Các thông số tổng hợp trên Dashboard:
+#     1. Uptime & Khởi động: Tên máy chủ, thời điểm boot gần nhất, thời gian hoạt động liên tục.
+#     2. VRAM 4 Card GPU NVIDIA RTX PRO 6000:
+#        - Dung lượng VRAM trống (GB) và tổng dung lượng (GB).
+#        - Tỷ lệ phần trăm tải GPU Utilization (%).
+#        - Nhiệt độ vận hành từng GPU (°C).
+#        - Mã màu cảnh báo tự động:
+#          * XANH LÁ : VRAM trống > 40 GB (Sẵn sàng chạy model lớn).
+#          * VÀNG    : VRAM trống 15 GB - 40 GB (Đang có tải vừa phải).
+#          * ĐỎ      : VRAM trống < 15 GB (Đang bị chiếm dụng gần cạn kiệt).
+#     3. Tiến trình Training AI: Danh sách các Tmux sessions đang chạy train (Transformer, UNet).
+#     4. Trạng thái các Sentinel Daemons: Kiểm tra trực tiếp xem GPU Watcher, Process Guard,
+#        W&B Sync Daemon có đang hoạt động (RUNNING) hay đã dừng (STOPPED).
+#     5. Lịch sử cảnh báo: Hiển thị ngay các sự kiện kill process hoặc reboot gần nhất.
+#
+# Cách sử dụng:
+#     1. Xem nhanh một lần:
+#        ./status.sh
+#     2. Theo dõi liên tục thời gian thực (Live auto-refresh mỗi 3 giây):
+#        watch -n 3 -c ./status.sh
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -85,6 +110,7 @@ check_daemon() {
     fi
 }
 
+check_daemon "Auto Resume Watch" "auto_resume_watcher.py"
 check_daemon "GPU Watcher      " "gpu_watcher.py"
 check_daemon "Process Guard    " "process_guard.py"
 check_daemon "W&B Auto-Sync    " "wandb_sync_daemon.sh"
@@ -93,11 +119,14 @@ echo ""
 
 # 5. Recent Alerts / Logs
 echo -e "${C_BOLD}${C_BLUE}--- 🚨 NHẬT KÝ CẢNH BÁO GẦN NHẤT ---${C_RESET}"
+if [ -f "$SCRIPT_DIR/auto_resume_watcher.log" ]; then
+    echo -e "${C_BOLD}[auto_resume_watcher.log]${C_RESET}"
+    tail -n 3 "$SCRIPT_DIR/auto_resume_watcher.log" | sed 's/^/  /'
+fi
+
 if [ -f "$SCRIPT_DIR/process_guard.log" ]; then
     echo -e "${C_BOLD}[process_guard.log]${C_RESET}"
     tail -n 3 "$SCRIPT_DIR/process_guard.log" | sed 's/^/  /'
-else
-    echo "  Chưa có sự kiện process_guard."
 fi
 
 if [ -f "$SCRIPT_DIR/reboot_history.log" ]; then

@@ -1,6 +1,25 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# 🚀 Start All AI Server System Monitors in Tmux
+# CÔNG CỤ: Start All System Monitors (Khởi Động Trọn Bộ Giám Sát Trong Tmux)
+# Tác giả: AI Assistant / AnhNB9
+# Mục đích:
+#     Khởi chạy toàn bộ hệ sinh thái ứng dụng giám sát hệ thống (Watchdog Suite)
+#     bên trong một session Tmux độc lập mang tên 'sys_monitors'.
+#
+# Cấu trúc các cửa sổ (Windows) được khởi tạo trong Tmux:
+#     - Window 0 [gpu_watcher]   : Quét liên tục VRAM 4 card GPU mỗi 10 giây, sẵn sàng
+#                                  phát hiện GPU trống và kích hoạt job.
+#     - Window 1 [process_guard] : Trực chờ các PID huấn luyện mô hình (train.py, diffusion),
+#                                  tự động điều tra ai đã kill tiến trình qua /var/log/auth.log.
+#     - Window 2 [wandb_sync]    : Chạy tiến trình đồng bộ ngầm định kỳ dữ liệu lên W&B
+#                                  bằng giao thức an toàn không lỗi EOF.
+#
+# Lợi ích:
+#     - Giữ cho toàn bộ các script giám sát chạy liên tục 24/7 ngay cả khi đóng terminal SSH.
+#     - Cho phép quản trị viên attach vào xem live log của từng công cụ bất cứ lúc nào.
+#
+# Cách sử dụng:
+#     ./start_all_monitors.sh
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
