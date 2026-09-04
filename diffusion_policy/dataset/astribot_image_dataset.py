@@ -4,6 +4,8 @@ import numpy as np
 import zarr
 import os
 import copy
+import threading
+import time
 from threadpoolctl import threadpool_limits
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.dataset.base_dataset import BaseImageDataset
@@ -31,13 +33,24 @@ class AstribotImageDataset(BaseImageDataset):
             seed=42,
             val_ratio=0.05,
             max_train_episodes=None,
+            use_cache=True,
+            max_cache_size_gb=50.0,
+            background_preload=True,
+            preload_delay_sec=1.0,
+            preload_sleep_sec=0.01,
         ):
         assert os.path.exists(dataset_path), f"Dataset path {dataset_path} does not exist!"
         
         # Load ReplayBuffer
+        self.cache_store = None
         if dataset_path.endswith('.zip'):
             with zarr.ZipStore(dataset_path, mode='r') as zip_store:
                 replay_buffer = ReplayBuffer.copy_from_store(src_store=zip_store, store=zarr.MemoryStore())
+        elif use_cache and max_cache_size_gb > 0:
+            store = zarr.DirectoryStore(os.path.expanduser(dataset_path))
+            self.cache_store = zarr.LRUStoreCache(store, max_size=int(max_cache_size_gb * (1024**3)))
+            root = zarr.group(store=self.cache_store)
+            replay_buffer = ReplayBuffer.create_from_group(root)
         else:
             replay_buffer = ReplayBuffer.create_from_path(dataset_path, mode='r')
             
@@ -85,6 +98,48 @@ class AstribotImageDataset(BaseImageDataset):
         self.n_latency_steps = n_latency_steps
         self.pad_before = pad_before
         self.pad_after = pad_after
+
+        # Start background preloading thread to pre-warm RAM cache gradually
+        if background_preload and self.cache_store is not None:
+            self._start_background_preload(
+                root=replay_buffer.root,
+                cache_store=self.cache_store,
+                max_bytes=int(max_cache_size_gb * (1024**3)),
+                delay_sec=preload_delay_sec,
+                sleep_sec=preload_sleep_sec
+            )
+
+    def _start_background_preload(self, root, cache_store, max_bytes, delay_sec=1.0, sleep_sec=0.01):
+        def _preloader():
+            time.sleep(delay_sec)
+            try:
+                # Preload low-dim keys (small, fast)
+                for key in self.lowdim_keys + ['action']:
+                    if key in root['data']:
+                        _ = root['data'][key][:]
+
+                # Preload RGB images chunk-by-chunk
+                for key in self.rgb_keys:
+                    if key not in root['data']:
+                        continue
+                    arr = root['data'][key]
+                    chunk_len = arr.chunks[0] if hasattr(arr, 'chunks') and arr.chunks is not None else 100
+                    total_len = arr.shape[0]
+
+                    for start_idx in range(0, total_len, chunk_len):
+                        cur_size = getattr(cache_store, '_current_size', 0)
+                        if cur_size >= max_bytes:
+                            # Reached 50GB limit, stop preloading
+                            return
+                        # Touch 1 element in chunk to trigger LRU cache population
+                        _ = arr[start_idx:start_idx+1]
+                        if sleep_sec > 0:
+                            time.sleep(sleep_sec)
+            except Exception:
+                pass
+
+        thread = threading.Thread(target=_preloader, daemon=True, name="AstribotDatasetPreloader")
+        thread.start()
 
     def get_validation_dataset(self):
         val_set = copy.copy(self)

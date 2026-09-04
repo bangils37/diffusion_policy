@@ -34,3 +34,9 @@ dataset:
   n_latency_steps: ${n_latency_steps}
   seed: 42
   val_ratio: 0.05
+  max_train_episodes: null
+  use_cache: True
+  max_cache_size_gb: 50.0
+  background_preload: True
+  preload_delay_sec: 1.0
+  preload_sleep_sec: 0.01
