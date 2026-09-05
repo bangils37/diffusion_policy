@@ -35,14 +35,22 @@ Các tham số dòng lệnh (CLI Arguments):
     --unet-vram        : VRAM tối thiểu (GB) cho U-Net (Mặc định: 30.0 GB).
     --interval         : Chu kỳ kiểm tra (giây) (Mặc định: 10 giây).
     --log-file         : Đường dẫn file nhật ký (Mặc định: 'auto_resume_watcher.log').
-    --once             : Chỉ quét 1 lần rồi thoát (Dry-run kiểm tra).
+    --exit-when-done   : Tự động kết thúc script Watcher sau khi ĐÃ KHỞI CHẠY THÀNH CÔNG các task.
+                         (Mặc định là False: Watcher tiếp tục chạy ngầm để bảo vệ, tự động
+                         resume lại nếu sau này task bị kill hoặc crash giữa chừng).
+    --once             : Chỉ quét 1 lần duy nhất rồi thoát (Dry-run kiểm tra).
+
+Cơ chế an toàn (Process Safety):
+    - Khi các tác vụ đã chạy (RUNNING): Watcher TUYỆT ĐỐI KHÔNG tự kill hay can thiệp vào task.
+    - Watcher chỉ đóng vai trò người quan sát (Observer/Dispatcher), đảm bảo tiến trình huấn
+      luyện được thực thi độc lập trong session Tmux an toàn.
 
 Ví dụ sử dụng:
-    1. Chạy trực tiếp theo dõi liên tục:
+    1. Chạy trực tiếp theo dõi liên tục và tự phục hồi 24/7 (Khuyên dùng):
        python3 auto_resume_watcher.py
 
-    2. Chạy với chu kỳ 15 giây:
-       python3 auto_resume_watcher.py --interval 15
+    2. Tự thoát sau khi đã kích hoạt thành công cả 2 task:
+       python3 auto_resume_watcher.py --exit-when-done
 
     3. Chạy kiểm tra nhanh hiện trạng GPU và tác vụ:
        python3 auto_resume_watcher.py --once
@@ -348,6 +356,11 @@ def main():
         help=f"Đường dẫn lưu nhật ký hoạt động (mặc định: {DEFAULT_LOG_FILE.name})",
     )
     parser.add_argument(
+        "--exit-when-done",
+        action="store_true",
+        help="Tự động thoát Watcher sau khi cả 2 tác vụ đều đã được kích hoạt thành công",
+    )
+    parser.add_argument(
         "--once",
         action="store_true",
         help="Chỉ kiểm tra 1 lần duy nhất rồi thoát",
@@ -362,6 +375,7 @@ def main():
     print(f"⚙️  Ngưỡng VRAM Transformer : >= {args.transformer_vram} GB -> Session: train_transformer")
     print(f"⚙️  Ngưỡng VRAM U-Net       : >= {args.unet_vram} GB -> Session: train_unet")
     print(f"⚙️  Chu kỳ quét            : {args.interval} giây")
+    print(f"⚙️  Chế độ kết thúc        : {'Tự thoát khi cả 2 task chạy' if args.exit_when_done else 'Chạy thường trực bảo vệ 24/7'}")
     print(f"📂 Nhật ký lưu tại         : {log_path}")
     print(f"{C_BOLD}{C_CYAN}------------------------------------------------------------------------------{C_RESET}")
 
@@ -373,7 +387,14 @@ def main():
 
     try:
         while True:
-            run_cycle(args.transformer_vram, args.unet_vram, log_path)
+            trans_ok, unet_ok = run_cycle(args.transformer_vram, args.unet_vram, log_path)
+            if args.exit_when_done and trans_ok and unet_ok:
+                log_msg(
+                    f"{C_GREEN}{C_BOLD}🎉 CẢ 2 TÁC VỤ (TRANSFORMER & U-NET) ĐÃ ĐƯỢC KÍCH HOẠT THÀNH CÔNG!{C_RESET}",
+                    log_path,
+                )
+                log_msg("ℹ️ Đã hoàn thành sứ mệnh điều phối. Watcher tự động thoát (exit 0) theo cờ --exit-when-done.", log_path)
+                sys.exit(0)
             time.sleep(args.interval)
     except KeyboardInterrupt:
         log_msg("🛑 Đã nhận tín hiệu dừng từ người dùng. Tạm biệt!", log_path)
