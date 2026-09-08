@@ -269,20 +269,20 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
                     new_key = key.replace('/', '_')
                     metric_dict[new_key] = value
 
-                # 1. Save best checkpoint based on monitor_key (e.g. lowest val_loss) after EVERY validation epoch
+                # 1. Save latest checkpoint after EVERY epoch (any epoch number)
+                if cfg.checkpoint.save_last_ckpt:
+                    self.save_checkpoint()
+                if cfg.checkpoint.save_last_snapshot:
+                    self.save_snapshot()
+
+                # 2. Save best checkpoint based on monitor_key (e.g. lowest val_loss) after EVERY validation epoch
                 if topk_manager is not None and (self.epoch % cfg.training.val_every) == 0:
                     topk_ckpt_path = topk_manager.get_ckpt_path(metric_dict)
                     if topk_ckpt_path is not None:
                         self.save_checkpoint(path=topk_ckpt_path)
 
-                # 2. Periodic checkpointing
+                # 3. Periodic checkpointing (keeps last K periodic checkpoints at checkpoint_every intervals)
                 if (self.epoch % cfg.training.checkpoint_every) == 0:
-                    if cfg.checkpoint.save_last_ckpt:
-                        self.save_checkpoint()
-                    if cfg.checkpoint.save_last_snapshot:
-                        self.save_snapshot()
-
-                    # Save recent checkpoint (keeps last K periodic checkpoints)
                     if recent_manager is not None:
                         recent_ckpt_path = recent_manager.get_ckpt_path(metric_dict)
                         if recent_ckpt_path is not None:
