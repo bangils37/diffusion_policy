@@ -18,6 +18,30 @@ class TopKCheckpointManager:
         self.k = k
         self.format_str = format_str
         self.path_value_map = dict()
+
+        # Discover pre-existing topk checkpoints in save_dir
+        if os.path.exists(save_dir) and os.path.isdir(save_dir):
+            import re
+            pattern = re.compile(rf"{monitor_key}=([0-9]+\.?[0-9]*)")
+            for fname in os.listdir(save_dir):
+                if not fname.endswith('.ckpt') or fname == 'latest.ckpt':
+                    continue
+                match = pattern.search(fname)
+                if match:
+                    try:
+                        val = float(match.group(1))
+                        fpath = os.path.join(save_dir, fname)
+                        self.path_value_map[fpath] = val
+                    except ValueError:
+                        pass
+            # If more than k existing, trim to best k
+            if len(self.path_value_map) > self.k and self.k > 0:
+                sorted_items = sorted(
+                    self.path_value_map.items(), 
+                    key=lambda x: x[1], 
+                    reverse=(self.mode == 'max')
+                )
+                self.path_value_map = dict(sorted_items[:self.k])
     
     def get_ckpt_path(self, data: Dict[str, float]) -> Optional[str]:
         if self.k == 0:

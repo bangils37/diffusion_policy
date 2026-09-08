@@ -263,30 +263,30 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
                         del pred_action
                         del mse
                 
-                # checkpoint
+                # sanitize metric names
+                metric_dict = dict()
+                for key, value in step_log.items():
+                    new_key = key.replace('/', '_')
+                    metric_dict[new_key] = value
+
+                # 1. Save best checkpoint based on monitor_key (e.g. lowest val_loss) after EVERY validation epoch
+                if topk_manager is not None and (self.epoch % cfg.training.val_every) == 0:
+                    topk_ckpt_path = topk_manager.get_ckpt_path(metric_dict)
+                    if topk_ckpt_path is not None:
+                        self.save_checkpoint(path=topk_ckpt_path)
+
+                # 2. Periodic checkpointing
                 if (self.epoch % cfg.training.checkpoint_every) == 0:
-                    # checkpointing
                     if cfg.checkpoint.save_last_ckpt:
                         self.save_checkpoint()
                     if cfg.checkpoint.save_last_snapshot:
                         self.save_snapshot()
 
-                    # sanitize metric names
-                    metric_dict = dict()
-                    for key, value in step_log.items():
-                        new_key = key.replace('/', '_')
-                        metric_dict[new_key] = value
-                    
-                    # 1. Save recent checkpoint (keeps last K periodic checkpoints)
+                    # Save recent checkpoint (keeps last K periodic checkpoints)
                     if recent_manager is not None:
                         recent_ckpt_path = recent_manager.get_ckpt_path(metric_dict)
                         if recent_ckpt_path is not None:
                             self.save_checkpoint(path=recent_ckpt_path)
-
-                    # 2. Save best checkpoint based on monitor_key (e.g. lowest val_loss)
-                    topk_ckpt_path = topk_manager.get_ckpt_path(metric_dict)
-                    if topk_ckpt_path is not None:
-                        self.save_checkpoint(path=topk_ckpt_path)
                 # ========= eval end for this epoch ==========
                 policy.train()
 

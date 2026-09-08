@@ -11,7 +11,7 @@ elif command -v conda &> /dev/null && conda info --envs | grep -q "robodiff"; th
     conda activate robodiff
 fi
 
-export CUDA_VISIBLE_DEVICES="${GPU_ID:-3}"
+export CUDA_VISIBLE_DEVICES="${GPU_ID:-2}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
 export PYTHONUNBUFFERED=1
 
@@ -20,19 +20,19 @@ DATASET_PATH="/home/anhnb9/Documents/datasets/astri_making_coffee_v21.zarr"
 BATCH_SIZE="${BATCH_SIZE:-256}"
 NUM_WORKERS="${NUM_WORKERS:-16}"
 LR="${LR:-2.0e-4}"
-NUM_EPOCHS="${NUM_EPOCHS:-150}"
+NUM_EPOCHS="${NUM_EPOCHS:-300}"
 CHECKPOINT_EVERY="${CHECKPOINT_EVERY:-10}"
 WANDB_PROJECT="astribot_making_coffee"
 WANDB_ID="mhv1glal"
 
 echo "============================================================"
-echo "🚀 TIẾP TỤC TRAINING CNN/UNET BASELINE (Resuming from Epoch 140)"
+echo "🚀 TIẾP TỤC TRAINING CNN/UNET BASELINE (Resuming from latest checkpoint)"
 echo "📂 Thư mục output: $OUTPUT_DIR"
 echo "🎯 GPU: GPU $CUDA_VISIBLE_DEVICES"
 echo "⚙️  Batch Size: $BATCH_SIZE"
 echo "⚙️  Num Workers: $NUM_WORKERS"
 echo "⚙️  Learning Rate: $LR"
-echo "⚙️  Additional Epochs: $NUM_EPOCHS"
+echo "⚙️  Target Epochs: $NUM_EPOCHS"
 echo "⚙️  Checkpoint Every: $CHECKPOINT_EVERY epochs"
 echo "📊 WandB: $WANDB_PROJECT (run: $WANDB_ID)"
 echo "============================================================"
