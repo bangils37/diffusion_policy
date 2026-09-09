@@ -334,14 +334,14 @@ def main():
     parser.add_argument(
         "--transformer-vram",
         type=float,
-        default=60.0,
-        help="Dung lượng VRAM trống tối thiểu (GB) cho Transformer (mặc định: 60.0 GB)",
+        default=50.0,
+        help="Dung lượng VRAM trống tối thiểu (GB) cho Transformer (mặc định: 50.0 GB)",
     )
     parser.add_argument(
         "--unet-vram",
         type=float,
-        default=30.0,
-        help="Dung lượng VRAM trống tối thiểu (GB) cho U-Net (mặc định: 30.0 GB)",
+        default=50.0,
+        help="Dung lượng VRAM trống tối thiểu (GB) cho U-Net (mặc định: 50.0 GB)",
     )
     parser.add_argument(
         "--interval",

@@ -21,7 +21,7 @@ TMUX_NAME="auto_resume_watcher"
 
 echo "============================================================"
 echo "🛡️  KHỞI ĐỘNG AUTO RESUME WATCHER (Session Tmux: $TMUX_NAME)"
-echo "⚙️  Quy tắc phân bổ: U-Net >= 30GB VRAM | Transformer >= 60GB VRAM"
+echo "⚙️  Quy tắc phân bổ: U-Net >= 50GB VRAM | Transformer >= 50GB VRAM"
 echo "============================================================"
 
 # Hủy session cũ nếu đang tồn tại
@@ -29,7 +29,7 @@ tmux kill-session -t "$TMUX_NAME" 2>/dev/null || true
 
 # Tạo session mới chạy auto_resume_watcher.py
 tmux new-session -d -s "$TMUX_NAME" \
-    "python3 $SCRIPT_DIR/auto_resume_watcher.py --transformer-vram 60 --unet-vram 30 --interval 10"
+    "python3 $SCRIPT_DIR/auto_resume_watcher.py --transformer-vram 50 --unet-vram 50 --interval 10"
 
 echo "✅ Auto Resume Watcher đã được khởi chạy ngầm thành công trong Tmux!"
 echo "👉 Xem trực tiếp quá trình canh GPU: tmux attach -t $TMUX_NAME"
