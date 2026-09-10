@@ -35,15 +35,16 @@ export PYTHONUNBUFFERED=1
 OUTPUT_DIR="data/outputs/2026.09.03/10.26.32_train_diffusion_transformer_real_image_astribot_making_coffee_image"
 DATASET_PATH="/home/anhnb9/Documents/datasets/astri_making_coffee_v21.zarr"
 BATCH_SIZE="${BATCH_SIZE:-256}"
-NUM_WORKERS="${NUM_WORKERS:-16}"
+NUM_WORKERS="${NUM_WORKERS:-8}"
 LR="${LR:-1.0e-4}"
 NUM_EPOCHS="${NUM_EPOCHS:-150}"
 CHECKPOINT_EVERY="${CHECKPOINT_EVERY:-10}"
 WANDB_PROJECT="astribot_making_coffee"
 WANDB_ID="f5qol23j"
+WANDB_MODE="${WANDB_MODE:-online}"
 
 echo "============================================================"
-echo "🚀 TIẾP TỤC TRAINING TRANSFORMER-BASE (Resuming from Epoch 40)"
+echo "🚀 TIẾP TỤC TRAINING TRANSFORMER-BASE (Resuming latest.ckpt)"
 echo "📂 Thư mục output: $OUTPUT_DIR"
 echo "🎯 GPU: GPU $CUDA_VISIBLE_DEVICES"
 echo "⚙️  Batch Size: $BATCH_SIZE"
@@ -51,8 +52,17 @@ echo "⚙️  Num Workers: $NUM_WORKERS"
 echo "⚙️  Learning Rate: $LR"
 echo "⚙️  Target Epochs: $NUM_EPOCHS"
 echo "⚙️  Checkpoint Every: $CHECKPOINT_EVERY epochs"
-echo "📊 WandB: $WANDB_PROJECT (run: $WANDB_ID)"
+echo "📊 WandB: $WANDB_PROJECT (mode: $WANDB_MODE, run: $WANDB_ID)"
 echo "============================================================"
+
+# Pre-flight VRAM Check
+if command -v nvidia-smi &> /dev/null; then
+    FREE_VRAM=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits -i "$CUDA_VISIBLE_DEVICES" 2>/dev/null | head -n1 || echo 0)
+    echo "🔍 VRAM khả dụng trên GPU $CUDA_VISIBLE_DEVICES: ${FREE_VRAM} MiB"
+    if [ "$FREE_VRAM" -lt 50000 ]; then
+        echo "⚠️ CẢNH BÁO: VRAM khả dụng (${FREE_VRAM} MiB) < 50,000 MiB! Có nguy cơ xung đột hoặc OOM."
+    fi
+fi
 
 python train.py \
     --config-name=train_diffusion_transformer_real_image_workspace \

@@ -120,11 +120,21 @@ class TrainDiffusionTransformerImageWorkspace(BaseWorkspace):
                 output_dir=self.output_dir)
 
         # configure logging
-        wandb_run = wandb.init(
-            dir=str(self.output_dir),
-            config=OmegaConf.to_container(cfg, resolve=True),
-            **cfg.logging
-        )
+        wandb_kwargs = dict(cfg.logging)
+        try:
+            wandb_run = wandb.init(
+                dir=str(self.output_dir),
+                config=OmegaConf.to_container(cfg, resolve=True),
+                **wandb_kwargs
+            )
+        except Exception as e:
+            print(f"[WARNING] wandb.init failed ({e}). Falling back to mode='offline'...")
+            wandb_kwargs['mode'] = 'offline'
+            wandb_run = wandb.init(
+                dir=str(self.output_dir),
+                config=OmegaConf.to_container(cfg, resolve=True),
+                **wandb_kwargs
+            )
         wandb.config.update(
             {
                 "output_dir": self.output_dir,
