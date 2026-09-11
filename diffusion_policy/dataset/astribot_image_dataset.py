@@ -31,6 +31,8 @@ class AstribotImageDataset(BaseImageDataset):
             seed=42,
             val_ratio=0.05,
             max_train_episodes=None,
+            mem_num_frames: Optional[int]=None,
+            mem_frame_stride: int=15,
         ):
         assert os.path.exists(dataset_path), f"Dataset path {dataset_path} does not exist!"
         
@@ -52,7 +54,14 @@ class AstribotImageDataset(BaseImageDataset):
                 lowdim_keys.append(key)
                 
         key_first_k = dict()
-        if n_obs_steps is not None:
+        if mem_num_frames is not None:
+            # When using temporal memory, RGB keys are sampled directly via strided temporal indexing
+            for key in rgb_keys:
+                key_first_k[key] = 0
+            if n_obs_steps is not None:
+                for key in lowdim_keys:
+                    key_first_k[key] = n_obs_steps
+        elif n_obs_steps is not None:
             for key in rgb_keys + lowdim_keys:
                 key_first_k[key] = n_obs_steps
 
@@ -85,6 +94,17 @@ class AstribotImageDataset(BaseImageDataset):
         self.n_latency_steps = n_latency_steps
         self.pad_before = pad_before
         self.pad_after = pad_after
+        self.mem_num_frames = mem_num_frames
+        self.mem_frame_stride = mem_frame_stride
+        self.episode_ends = replay_buffer.episode_ends[:]
+
+        if mem_num_frames is not None:
+            # Compute past offsets ending at 0: [-(num_frames - 1)*stride, ..., -stride, 0]
+            self.mem_offsets = np.array([
+                -(mem_num_frames - 1 - i) * mem_frame_stride for i in range(mem_num_frames)
+            ], dtype=np.int64)
+        else:
+            self.mem_offsets = None
 
     def get_validation_dataset(self):
         val_set = copy.copy(self)
@@ -125,15 +145,42 @@ class AstribotImageDataset(BaseImageDataset):
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         with threadpool_limits(1):
             data = self.sampler.sample_sequence(idx)
-
-            T_slice = slice(self.n_obs_steps)
             obs_dict = dict()
-            
-            for key in self.rgb_keys:
-                # Shape: (T_obs, H, W, C) -> (T_obs, C, H, W) normalized to [0, 1]
-                obs_dict[key] = np.moveaxis(data[key][T_slice], -1, 1).astype(np.float32) / 255.0
-                del data[key]
+
+            if self.mem_num_frames is not None:
+                # Sequence Memory Video Sampling
+                buffer_start_idx, buffer_end_idx, sample_start_idx, sample_end_idx \
+                    = self.sampler.indices[idx]
                 
+                # Anchor step: latest observation step
+                anchor_offset = (self.n_obs_steps - 1) if (self.n_obs_steps is not None and self.n_obs_steps > 0) else 0
+                anchor_idx = buffer_start_idx + sample_start_idx + anchor_offset
+
+                # Find episode boundary for clamping
+                ep_idx = np.searchsorted(self.episode_ends, anchor_idx, side='right')
+                ep_start = 0 if ep_idx == 0 else self.episode_ends[ep_idx - 1]
+                ep_end = self.episode_ends[ep_idx]
+
+                # Strided sampling into past, clamped at episode boundaries
+                mem_indices = np.clip(anchor_idx + self.mem_offsets, ep_start, ep_end - 1)
+                min_i, max_i = mem_indices[0], mem_indices[-1]
+                rel_indices = mem_indices - min_i
+
+                for key in self.rgb_keys:
+                    # Single contiguous slice from Zarr, indexed in memory via numpy
+                    chunk = self.replay_buffer[key][min_i : max_i + 1]
+                    sampled_frames = chunk[rel_indices] # (T_mem, H, W, C)
+                    obs_dict[key] = np.moveaxis(sampled_frames, -1, 1).astype(np.float32) / 255.0
+                    if key in data:
+                        del data[key]
+            else:
+                T_slice = slice(self.n_obs_steps)
+                for key in self.rgb_keys:
+                    # Shape: (T_obs, H, W, C) -> (T_obs, C, H, W) normalized to [0, 1]
+                    obs_dict[key] = np.moveaxis(data[key][T_slice], -1, 1).astype(np.float32) / 255.0
+                    del data[key]
+                
+            T_slice = slice(self.n_obs_steps)
             for key in self.lowdim_keys:
                 obs_dict[key] = data[key][T_slice].astype(np.float32)
                 del data[key]
@@ -147,3 +194,7 @@ class AstribotImageDataset(BaseImageDataset):
                 'action': torch.from_numpy(action)
             }
             return torch_data
+
+# Alias for explicit config referencing
+AstribotMemImageDataset = AstribotImageDataset
+

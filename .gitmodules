@@ -1,0 +1,4 @@
+[submodule "submodules/openpi"]
+	path = submodules/openpi
+	url = git@gitlab.vinsmartfuture.tech:vinmotion/vinmotion/software-ai/manipulation/openpi.git
+	branch = feature/mem-pi05
