@@ -126,9 +126,14 @@ class DiffusionUnetMemImagePolicy(BaseImagePolicy):
         trajectory[condition_mask] = condition_data[condition_mask]
         return trajectory
 
-    def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def predict_action(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        obs_dict: must include observation keys in shape_meta
+        result: must include "action" and "action_pred" keys
+        """
+        assert 'past_action' not in obs_dict
         # Normalize observations
-        nobs = self.normalizer.normalize(batch['obs'])
+        nobs = self.normalizer.normalize(obs_dict)
         B = next(iter(nobs.values())).shape[0]
         T = self.horizon
         Da = self.action_dim
@@ -146,7 +151,7 @@ class DiffusionUnetMemImagePolicy(BaseImagePolicy):
         nsample = self.conditional_sample(
             cond_data, 
             cond_mask,
-            local_cond=None,
+            local_cond=None, 
             global_cond=global_cond,
             **self.kwargs
         )
@@ -163,9 +168,33 @@ class DiffusionUnetMemImagePolicy(BaseImagePolicy):
             'action_pred': action_pred
         }
 
+    def forward(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+        return self.compute_loss(batch)
+
     # ========= training ============
     def set_normalizer(self, normalizer: LinearNormalizer):
         self.normalizer.load_state_dict(normalizer.state_dict())
+
+    def get_optimizer(
+            self, 
+            lr: float = 2.0e-4, 
+            weight_decay: float = 1.0e-6,
+            obs_encoder_lr: Optional[float] = None,
+            obs_encoder_weight_decay: Optional[float] = None,
+            betas: tuple = (0.95, 0.999),
+            eps: float = 1.0e-8,
+            **kwargs
+        ) -> torch.optim.Optimizer:
+        if obs_encoder_lr is None:
+            obs_encoder_lr = lr
+        if obs_encoder_weight_decay is None:
+            obs_encoder_weight_decay = weight_decay
+
+        param_groups = [
+            {"params": self.model.parameters(), "lr": lr, "weight_decay": weight_decay},
+            {"params": self.obs_encoder.parameters(), "lr": obs_encoder_lr, "weight_decay": obs_encoder_weight_decay},
+        ]
+        return torch.optim.AdamW(param_groups, betas=betas, eps=eps)
 
     def compute_loss(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         # Normalize input

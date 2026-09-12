@@ -145,7 +145,10 @@ class MemMultiImageObsEncoder(ModuleAttrMixin):
                 dummy_img = torch.zeros(1, c, h, w)
                 dummy_trans = self.key_transform_map[key](dummy_img)
                 dummy_feat = model(dummy_trans)
-                feat_dim = dummy_feat.shape[-1]
+                if dummy_feat.ndim == 4:
+                    feat_dim = dummy_feat.shape[1]
+                else:
+                    feat_dim = dummy_feat.shape[-1]
 
                 if share_mem_encoder and 'shared' in key_mem_map:
                     continue
