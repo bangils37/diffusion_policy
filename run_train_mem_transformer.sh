@@ -43,7 +43,12 @@ echo "📊 WandB: $WANDB_PROJECT (mode: $WANDB_MODE)"
 echo "📁 Dataset: $DATASET_PATH"
 echo "============================================================"
 
-python train.py \
+PYTHON_BIN="python"
+if [ -f "$SCRIPT_DIR/env/bin/python" ]; then
+    PYTHON_BIN="$SCRIPT_DIR/env/bin/python"
+fi
+
+"$PYTHON_BIN" train.py \
     --config-name="$CONFIG_NAME" \
     task="$TASK_NAME" \
     task.dataset.dataset_path="$DATASET_PATH" \
